@@ -1,7 +1,9 @@
 const express = require("express");
 const bodyParser = require("body-parser");
+require("dotenv").config();
 
 const app = express();
+const pool = require("./config/db");
 const PORT = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
@@ -24,59 +26,53 @@ app.all("/", (req, res) => {
 });
 
 // Obter todas as tarefas
-app.get("/tasks", (req, res) => {
-  res.send(tasks);
+app.get("/tasks", async (req, res) => {
+  // Use a conexão com o banco de dados para obter as tarefas
+  await pool.getConnection((error, connection) => {
+    if (error) {
+      throw new Error("Erro ao conectar ao banco de dados: " + error.message);
+    } else {
+      console.log("Conexão com o banco de dados estabelecida com sucesso");
+    }
+    connection.query("SELECT * FROM tasks", (err, rows) => {
+      if (err) {
+        console.error("Erro ao obter as tarefas:", err);
+        res.status(500).send({ error: "Erro ao obter as tarefas" });
+      } else {
+        res.send(rows);
+      }
+      connection.release();
+    });
+  });
 });
 
-// Obter uma tarefa pelo ID
-app.get("/tasks/:id", (req, res) => {
-  const id = parseInt(req.params.id);
-  const task = tasks.find((task) => task.id === id);
+// rota para criar uma tarefa
+app.post("/tasks", async (req, res) => {
+  const { title, completed } = req.body;
+  await pool.getConnection((error, connection) => {
+    if (error) {
+      throw new Error("Erro ao conectar ao banco de dados: " + error.message);
+    } else {
+      console.log("Conexão com o banco de dados estabelecida com sucesso");
+    }
 
-  if (!task) {
-    return res.status(404).send({ error: "Tarefa não encontrada" });
-  }
-
-  res.send(task);
+    connection.query(
+      "INSERT INTO tasks (title, completed) VALUES (?, ?)",
+      [title, completed],
+      (err, rows) => {
+        if (err) {
+          console.log("Erro ao inserir nova tarefa!", err);
+          res.status(500).send({ error: "Erro ao inserir nova tarefa." });
+        } else {
+          res.status(201).send("Nova tarefa atribuida.");
+        }
+        connection.release();
+      }
+    );
+  });
 });
 
-// Criar uma nova tarefa
-app.post("/tasks", (req, res) => {
-  const task = req.body;
-
-  if (!task.title) {
-    return res.status(400).send({ error: "Título da tarefa é obrigatório" });
-  }
-
-  task.id = tasks.length + 1;
-  task.completed = false;
-  tasks.push(task);
-
-  res.send(task);
-});
-
-// Atualizar uma tarefa existente
-app.put("/tasks/:id", (req, res) => {
-  const id = parseInt(req.params.id);
-  let task = tasks.find((task) => task.id === id);
-
-  if (!task) {
-    return res.status(404).send({ error: "Tarefa não encontrada" });
-  }
-
-  task.title = req.body.title || task.title;
-  task.completed = req.body.completed || task.completed;
-
-  res.send(task);
-});
-
-// Excluir uma tarefa existente
-app.delete("/tasks/:id", (req, res) => {
-  const id = parseInt(req.params.id);
-  tasks = tasks.filter((task) => task.id !== id);
-
-  res.send({ message: "Tarefa excluída com sucesso" });
-});
+// Restante do código da API...
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
